@@ -1,0 +1,57 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Password Evaluator API",
+    "description": "API para evaluar la entropía y fuerza de contraseñas.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/password/evaluate": {
+      "post": {
+        "summary": "Evalúa la fuerza de una contraseña",
+        "description": "Calcula entropía, fuerza y tiempo estimado de crackeo.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "description": "La contraseña a evaluar",
+                    "example": "MiClaveSegura123!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evaluación exitosa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "length": { "type": "integer" },
+                    "keyspace_size": { "type": "integer" },
+                    "entropy_bits": { "type": "number" },
+                    "strength": { "type": "string", "enum": ["Débil", "Aceptable", "Fuerte", "Muy Fuerte"] },
+                    "in_dictionary": { "type": "boolean" },
+                    "estimated_crack_time": { "type": "string" },
+                    "recommendations": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validación (e.g., sin password)"
+          }
+        }
+      }
+    }
+  }
+}
