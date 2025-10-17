@@ -16,6 +16,7 @@
         .strength-weak { color: red; }
         .strength-strong { color: green; }
         ul { margin: 0; padding-left: 20px; }
+        .keywords-warning { color: orange; font-weight: bold; }  /* NUEVO: Estilo para advertencia de keywords */
     </style>
 </head>
 <body>
@@ -48,13 +49,25 @@
 
                 const data = await response.json();
                 const strengthClass = data.strength === 'Muy Fuerte' || data.strength === 'Fuerte' ? 'strength-strong' : 'strength-weak';
+                
+                // NUEVO: Lógica para mensaje de diccionario/keywords
+                let dictMessage = '';
+                if (data.in_dictionary) {
+                    dictMessage = '<span class="keywords-warning">Sí (penalizado) - Coincidencia exacta</span>';
+                } else if (data.similar_matches && data.similar_matches.length > 0) {
+                    dictMessage = '<span class="keywords-warning">En la contraseña hay palabras claves</span><br><details><summary>Detalles de similitudes:</summary><ul>' + 
+                                  data.similar_matches.map(match => `<li>${match}</li>`).join('') + '</ul></details>';
+                } else {
+                    dictMessage = 'No';
+                }
+                
                 resultDiv.innerHTML = `
                     <h3>Resultados:</h3>
                     <p><strong>Longitud:</strong> ${data.length}</p>
                     <p><strong>Keyspace:</strong> ${data.keyspace_size}</p>
                     <p><strong>Entropía:</strong> ${data.entropy_bits} bits</p>
                     <p class="${strengthClass}"><strong>Fuerza:</strong> ${data.strength}</p>
-                    <p><strong>En diccionario:</strong> ${data.in_dictionary ? 'Sí (penalizado)' : 'No'}</p>
+                    <p><strong>En diccionario:</strong> ${dictMessage}</p>
                     <p><strong>Tiempo estimado:</strong> ${data.estimated_crack_time}</p>
                     ${data.recommendations.length > 0 ? `<h4>Recomendaciones:</h4><ul>${data.recommendations.map(rec => `<li>${rec}</li>`).join('')}</ul>` : ''}
                 `;

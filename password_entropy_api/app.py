@@ -1,9 +1,10 @@
 import math
 import re
 import os
+import difflib  # NUEVO: Para similitudes de strings (built-in)
 from flask import Flask, request, jsonify
 from flask_swagger_ui import get_swaggerui_blueprint
-from flask_cors import CORS  # Importación para CORS
+from flask_cors import CORS
 from passwords_set import load_dictionary
 
 app = Flask(__name__)
@@ -36,8 +37,8 @@ def calculate_entropy(password):
     E = L * math.log2(N)
     password_lower = password.lower().strip()
     if password_lower in COMMON_PASSWORDS:
-        E -= 20  # Penalización por predictibilidad
-    return max(E, 0)  # No negativo
+        E -= 20  
+    return max(E, 0)  
 
 def check_password_strength(password, entropy):
     """Evalúa fuerza y tiempo de crackeo."""
@@ -55,7 +56,51 @@ def check_password_strength(password, entropy):
     seconds = attempts / rate
     years = seconds / (365 * 24 * 3600)
     
-    in_dict = password.lower().strip() in COMMON_PASSWORDS
+    # MODIFICADO: Detección de subcadenas o similitudes, con case y parcial/exacta
+    password_lower = password.lower().strip()
+    password_original = password.strip()  # NUEVO: Guarda original para case
+    similar_matches = []
+    in_dict = False
+    is_partial = False  # NUEVO: Flag para parcial vs. exacta completa
+    
+    # Función auxiliar para obtener posiciones de case
+    def get_case_positions(word_orig):
+        upper_pos = [i+1 for i, char in enumerate(word_orig) if char.isupper()]  # Posiciones mayús (1-indexed)
+        lower_pos = [i+1 for i, char in enumerate(word_orig) if char.islower()]  # Posiciones minús
+        if upper_pos and lower_pos:
+            return f"mayúsculas en posiciones {upper_pos}; minúsculas en {lower_pos}"
+        elif upper_pos:
+            return f"mayúsculas en posiciones {upper_pos}"
+        elif lower_pos:
+            return f"minúsculas en posiciones {lower_pos}"
+        else:
+            return "sin letras (solo números/símbolos)"
+    
+    # Chequea coincidencia exacta completa (no parcial)
+    if password_lower in COMMON_PASSWORDS:
+        in_dict = True
+        # MODIFICADO: Detecta case del input original con posiciones
+        case_details = get_case_positions(password_original)
+        similar_matches.append(f"Coincidencia exacta (no parcial) con '{password_lower}' ({case_details})")
+    else:
+        is_partial = True  
+        words_lower = re.split(r'[\.\s\-_]+', password_lower)  
+        words_original = re.split(r'[\.\s\-_]+', password_original)  
+        for i, word_lower in enumerate(words_lower):
+            word_orig = words_original[i]  
+            if len(word_lower) > 2:  
+                # Chequea coincidencia exacta en subcadenas (parcial)
+                if word_lower in COMMON_PASSWORDS:
+                    case_details = get_case_positions(word_orig)
+                    similar_matches.append(f"Coincidencia parcial con subcadena '{word_lower}' ({case_details})")
+                # Chequea similitudes  en subcadenas (parcial)
+                matches = difflib.get_close_matches(word_lower, COMMON_PASSWORDS, n=3, cutoff=0.8)
+                for match in matches:
+                    ratio = difflib.SequenceMatcher(None, word_lower, match).ratio()
+                    case_details = get_case_positions(word_orig)
+                    similar_matches.append(f"Similitud parcial con subcadena '{word_lower}' a '{match}' (similitud {ratio:.2f}, {case_details})")
+    
+    # Si hay matches, penaliza 
     recommendations = []
     if calculate_L(password) < 8:
         recommendations.append("Aumenta la longitud a al menos 8 caracteres.")
@@ -63,10 +108,14 @@ def check_password_strength(password, entropy):
         recommendations.append("Añade al menos una mayúscula.")
     if not re.search(r'[^a-zA-Z0-9]', password):
         recommendations.append("Incluye símbolos para mayor entropía.")
+    if similar_matches:
+        type_match = "parcial" if is_partial else "exacta completa"
+        recommendations.append(f"Evita coincidencias {type_match}; usa variaciones únicas.")
     
     return {
         'strength': strength,
         'in_dictionary': in_dict,
+        'similar_matches': similar_matches,  
         'estimated_crack_time': f"{seconds:.2e} segundos (~{years:.2e} años)",
         'recommendations': recommendations
     }
@@ -90,6 +139,7 @@ def evaluate_password():
         'entropy_bits': round(entropy, 2),
         'strength': strength_info['strength'],
         'in_dictionary': strength_info['in_dictionary'],
+        'similar_matches': strength_info['similar_matches'],  # NUEVO: Incluido en respuesta
         'estimated_crack_time': strength_info['estimated_crack_time'],
         'recommendations': strength_info['recommendations']
     })
